@@ -131,23 +131,23 @@ function renderControls() {
 async function toggleDevice(el) {
   const accion = el.checked ? `${el.dataset.device}_on` : `${el.dataset.device}_off`;
   devicesState[el.dataset.device] = el.checked ? 'on' : 'off';
-  await supabase.from('COMANDOS').insert({ accion, estado: 'pendiente' });
+  await supabase.from('comandos').insert({ accion, estado: 'pendiente' });
   loadCommandLog();
 }
 
 async function loadSensors() {
   const { data, error } = await supabase
-    .from('LECTURA').select('idSensor, valor, fechaHora')
-    .order('fechaHora', { ascending: false }).limit(100);
+    .from('lectura').select('idsensor, valor, fechahora')
+    .order('fechahora', { ascending: false }).limit(100);
   if (error) return;
-  const { data: sensores } = await supabase.from('SENSOR').select('idSensor, tipo');
+  const { data: sensores } = await supabase.from('sensor').select('idsensor, tipo');
   if (!sensores) return;
   const tipoMap = {};
-  sensores.forEach(s => tipoMap[s.idSensor] = s.tipo);
+  sensores.forEach(s => tipoMap[s.idsensor] = s.tipo);
   const seen = {};
   currentReadings = {};
   for (const r of data) {
-    const t = tipoMap[r.idSensor];
+    const t = tipoMap[r.idsensor];
     if (!t || seen[t]) continue;
     seen[t] = true;
     currentReadings[t] = r;
@@ -157,16 +157,16 @@ async function loadSensors() {
 
 async function loadReadings() {
   const { data, error } = await supabase
-    .from('LECTURA').select('idSensor, valor, fechaHora')
-    .order('fechaHora', { ascending: false }).limit(20);
+    .from('lectura').select('idsensor, valor, fechahora')
+    .order('fechahora', { ascending: false }).limit(20);
   if (error) { document.getElementById('readingsTable').innerHTML = '<div class="empty">Error loading</div>'; return; }
-  const { data: sensores } = await supabase.from('SENSOR').select('idSensor, tipo');
+  const { data: sensores } = await supabase.from('sensor').select('idsensor, tipo');
   const tipoMap = {};
-  if (sensores) sensores.forEach(s => tipoMap[s.idSensor] = s.tipo);
+  if (sensores) sensores.forEach(s => tipoMap[s.idsensor] = s.tipo);
   let html = '<table><thead><tr><th>Time</th><th>Sensor</th><th>Value</th></tr></thead><tbody>';
   (data || []).forEach(r => {
-    const t = tipoMap[r.idSensor] || '?';
-    const time = new Date(r.fechaHora).toLocaleString();
+    const t = tipoMap[r.idsensor] || '?';
+    const time = new Date(r.fechahora).toLocaleString();
     const val = r.valor != null ? r.valor + (SENSOR_UNITS[t]||'') : '—';
     html += `<tr><td>${time}</td><td>${SENSOR_LABELS[t]||t}</td><td><strong>${val}</strong></td></tr>`;
   });
@@ -176,18 +176,18 @@ async function loadReadings() {
 
 async function loadCommandLog() {
   const { data, error } = await supabase
-    .from('COMANDOS').select('*').order('creadoEn', { ascending: false }).limit(10);
+    .from('comandos').select('*').order('creadoen', { ascending: false }).limit(10);
   if (error) { document.getElementById('commandLog').innerHTML = '<div class="empty">Error loading</div>'; return; }
   if (!data || data.length === 0) { document.getElementById('commandLog').innerHTML = '<div class="empty">No commands yet</div>'; return; }
   document.getElementById('commandLog').innerHTML = data.map(c => {
-    const time = new Date(c.creadoEn).toLocaleString();
+    const time = new Date(c.creadoen).toLocaleString();
     return `<div class="log-entry"><span class="action">${c.accion}</span><span class="time">${time}</span></div>`;
   }).join('');
 }
 
 async function loadLastCommandStates() {
   const { data } = await supabase
-    .from('COMANDOS').select('accion').order('creadoEn', { ascending: false }).limit(20);
+    .from('comandos').select('accion').order('creadoen', { ascending: false }).limit(20);
   if (!data) return;
   for (const c of CONTROLS) {
     const last = data.find(d => d.accion.startsWith(c.id));
