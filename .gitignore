@@ -21,3 +21,10 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+
+CONTEXT.md
+CONTEXT_FULL.md
+
+# Context files with secrets
+CONTEXT.md
+CONTEXT_FULL.md
