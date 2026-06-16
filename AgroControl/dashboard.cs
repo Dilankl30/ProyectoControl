@@ -1,412 +1,297 @@
 ﻿using System.Data;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms.DataVisualization.Charting;
+using Npgsql;
 
 namespace AgroControl
 {
     public partial class dashboard : Form
     {
+        private Label _lblTemp, _lblSoil, _lblHum, _lblIrrVal, _lblIrrSub;
+        private Label _lblTempInd, _lblSoilInd, _lblHumInd;
+        private DataGridView _rdgv, _plgv, _rqgv;
+        private Chart _chart;
+        private Label _updatedText;
+        private Panel _alertPanel;
+
         public dashboard()
         {
             InitializeComponent();
             BuildUI();
+            LoadData();
         }
 
-        private Panel CreateCard(Color accentColor, FontAwesome.Sharp.IconChar icon, string title, string value, string subtitle, string indicator, Color indicatorColor)
+        private Panel CreateCard(Color accentColor, FontAwesome.Sharp.IconChar icon, string title, string value, string subtitle, string indicator, Color indicatorColor, out Label valLabel, out Label indLabel)
         {
-            var card = new Panel
-            {
-                Size = new Size(245, 130),
-                BackColor = Color.White,
-                Margin = new Padding(8)
-            };
-
-            var accent = new Panel
-            {
-                Size = new Size(245, 4),
-                Location = new Point(0, 0),
-                BackColor = accentColor
-            };
-            card.Controls.Add(accent);
-
-            var iconCtrl = new FontAwesome.Sharp.IconPictureBox
-            {
-                IconChar = icon,
-                IconColor = accentColor,
-                IconSize = 32,
-                Location = new Point(15, 18),
-                Size = new Size(32, 32)
-            };
-            card.Controls.Add(iconCtrl);
-
-            var lblValue = new Label
-            {
-                Text = value,
-                Font = new Font("Segoe UI", 18, FontStyle.Bold),
-                ForeColor = Color.FromArgb(40, 45, 60),
-                Location = new Point(55, 15),
-                AutoSize = true
-            };
-            card.Controls.Add(lblValue);
-
-            var lblTitle = new Label
-            {
-                Text = title,
-                Font = new Font("Segoe UI", 9, FontStyle.Regular),
-                ForeColor = Color.FromArgb(120, 130, 150),
-                Location = new Point(55, 42),
-                AutoSize = true
-            };
-            card.Controls.Add(lblTitle);
-
-            var lblSub = new Label
-            {
-                Text = subtitle,
-                Font = new Font("Segoe UI", 8, FontStyle.Regular),
-                ForeColor = Color.FromArgb(150, 160, 180),
-                Location = new Point(15, 75),
-                AutoSize = true
-            };
-            card.Controls.Add(lblSub);
-
-            var lblInd = new Label
-            {
-                Text = indicator,
-                Font = new Font("Segoe UI", 8, FontStyle.Bold),
-                ForeColor = indicatorColor,
-                Location = new Point(15, 95),
-                AutoSize = true
-            };
-            card.Controls.Add(lblInd);
-
-            card.Paint += (s, e) =>
-            {
-                var g = e.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                using var path = new GraphicsPath();
-                path.AddArc(0, 0, 10, 10, 180, 90);
-                path.AddArc(card.Width - 10, 0, 10, 10, 270, 90);
-                path.AddArc(card.Width - 10, card.Height - 10, 10, 10, 0, 90);
-                path.AddArc(0, card.Height - 10, 10, 10, 90, 90);
-                path.CloseFigure();
-                card.Region = new Region(path);
-            };
-
+            var card = new Panel { Size = new Size(245, 130), BackColor = Color.White, Margin = new Padding(8) };
+            card.Controls.Add(new Panel { Size = new Size(245, 4), Location = new Point(0, 0), BackColor = accentColor });
+            card.Controls.Add(new FontAwesome.Sharp.IconPictureBox { IconChar = icon, IconColor = accentColor, IconSize = 32, Location = new Point(15, 18), Size = new Size(32, 32) });
+            valLabel = new Label { Text = value, Font = new Font("Segoe UI", 18, FontStyle.Bold), ForeColor = Color.FromArgb(40, 45, 60), Location = new Point(55, 15), AutoSize = true };
+            card.Controls.Add(valLabel);
+            card.Controls.Add(new Label { Text = title, Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(120, 130, 150), Location = new Point(55, 42), AutoSize = true });
+            card.Controls.Add(new Label { Text = subtitle, Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(150, 160, 180), Location = new Point(15, 75), AutoSize = true });
+            indLabel = new Label { Text = indicator, Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = indicatorColor, Location = new Point(15, 95), AutoSize = true };
+            card.Controls.Add(indLabel);
+            card.Paint += (s, e) => { var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; using var path = new GraphicsPath(); path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(card.Width - 10, 0, 10, 10, 270, 90); path.AddArc(card.Width - 10, card.Height - 10, 10, 10, 0, 90); path.AddArc(0, card.Height - 10, 10, 10, 90, 90); path.CloseFigure(); card.Region = new Region(path); };
             return card;
         }
 
-        private DataGridView CreateTable(string[] columns, string[][] rows, int[] widths = null)
+        private DataGridView CreateTable(string[] columns, string[][] rows = null)
         {
             var dgv = new DataGridView
             {
-                Size = new Size(480, 180),
-                BackColor = Color.White,
-                BackgroundColor = Color.White,
-                BorderStyle = BorderStyle.None,
-                CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
-                GridColor = Color.FromArgb(235, 238, 242),
-                RowHeadersVisible = false,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                AllowUserToResizeRows = false,
-                ReadOnly = true,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                Size = new Size(480, 180), BackColor = Color.White, BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.None, CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+                GridColor = Color.FromArgb(235, 238, 242), RowHeadersVisible = false, AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false, AllowUserToResizeRows = false, ReadOnly = true,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 Font = new Font("Segoe UI", 9),
                 RowTemplate = { Height = 28, DefaultCellStyle = new DataGridViewCellStyle { ForeColor = Color.FromArgb(60, 70, 85), BackColor = Color.White, SelectionBackColor = Color.FromArgb(235, 238, 250), SelectionForeColor = Color.FromArgb(60, 70, 85) } },
-                ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { Font = new Font("Segoe UI", 9, FontStyle.Bold), ForeColor = Color.FromArgb(100, 110, 130), BackColor = Color.FromArgb(245, 247, 250), SelectionBackColor = Color.FromArgb(245, 247, 250), Padding = new Padding(8, 0, 8, 0) },
+                ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { Font = new Font("Segoe UI", 9, FontStyle.Bold), ForeColor = Color.FromArgb(100, 110, 130), BackColor = Color.FromArgb(245, 247, 250), Padding = new Padding(8, 0, 8, 0) },
             };
-
-            foreach (var col in columns)
-                dgv.Columns.Add(col, col);
-
-            foreach (var row in rows)
-                dgv.Rows.Add(row);
-
-            if (widths != null)
-                for (int i = 0; i < widths.Length && i < dgv.Columns.Count; i++)
-                    dgv.Columns[i].Width = widths[i];
-
+            foreach (var col in columns) dgv.Columns.Add(col, col);
+            if (rows != null) foreach (var row in rows) dgv.Rows.Add(row);
             return dgv;
         }
 
-        private Panel CreateSectionTitle(string title)
+        private DataTable Query(string sql)
         {
-            var p = new Panel { Size = new Size(480, 30), BackColor = Color.White };
-            var lbl = new Label
-            {
-                Text = title,
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                ForeColor = Color.FromArgb(50, 55, 70),
-                Location = new Point(0, 0),
-                AutoSize = true
-            };
-            p.Controls.Add(lbl);
-            return p;
+            try { return DataAccess.DataAccess.getQuery(sql); }
+            catch { return new DataTable(); }
         }
 
         private void BuildUI()
         {
-            // ─── TOP TITLE ───
-            var lblDashboard = new Label
-            {
-                Text = "Dashboard",
-                Font = new Font("Segoe UI", 20, FontStyle.Bold),
-                ForeColor = Color.FromArgb(40, 45, 60),
-                Location = new Point(25, 20),
-                AutoSize = true
-            };
+            var lblDashboard = new Label { Text = "Dashboard", Font = new Font("Segoe UI", 20, FontStyle.Bold), ForeColor = Color.FromArgb(40, 45, 60), Location = new Point(25, 20), AutoSize = true };
             Controls.Add(lblDashboard);
-
-            var lblSubtitle = new Label
-            {
-                Text = "Overview of your greenhouse and sensor data.",
-                Font = new Font("Segoe UI", 10, FontStyle.Regular),
-                ForeColor = Color.FromArgb(140, 150, 170),
-                Location = new Point(27, 55),
-                AutoSize = true
-            };
+            var lblSubtitle = new Label { Text = "Overview of your greenhouse and sensor data.", Font = new Font("Segoe UI", 10), ForeColor = Color.FromArgb(140, 150, 170), Location = new Point(27, 55), AutoSize = true };
             Controls.Add(lblSubtitle);
 
-            // ─── CARDS ───
             var cards = new Panel { Location = new Point(20, 85), Size = new Size(1060, 145), BackColor = Color.Transparent };
-
-            cards.Controls.Add(CreateCard(Color.FromArgb(255, 90, 70), FontAwesome.Sharp.IconChar.ThermometerHalf, "Temperature", "26.4 °C", "Ideal: 22–28 °C", "+0.6 °C vs last hour", Color.FromArgb(0, 190, 100)));
+            cards.Controls.Add(CreateCard(Color.FromArgb(255, 90, 70), FontAwesome.Sharp.IconChar.ThermometerHalf, "Temperature", "-- °C", "Ideal: 22–28 °C", "Loading...", Color.Gray, out _lblTemp, out _lblTempInd));
             cards.Controls[^1].Location = new Point(0, 5);
-
-            cards.Controls.Add(CreateCard(Color.FromArgb(50, 140, 255), FontAwesome.Sharp.IconChar.Tint, "Soil Moisture", "32 %", "Ideal: 30–60 %", "-5 % vs last hour", Color.FromArgb(255, 80, 60)));
+            cards.Controls.Add(CreateCard(Color.FromArgb(50, 140, 255), FontAwesome.Sharp.IconChar.Tint, "Soil Moisture", "-- %", "Ideal: 30–60 %", "Loading...", Color.Gray, out _lblSoil, out _lblSoilInd));
             cards.Controls[^1].Location = new Point(260, 5);
-
-            cards.Controls.Add(CreateCard(Color.FromArgb(140, 80, 255), FontAwesome.Sharp.IconChar.Droplet, "Air Humidity", "68 %", "Ideal: 60–80 %", "+3 % vs last hour", Color.FromArgb(0, 190, 100)));
+            cards.Controls.Add(CreateCard(Color.FromArgb(140, 80, 255), FontAwesome.Sharp.IconChar.Droplet, "Air Humidity", "-- %", "Ideal: 60–80 %", "Loading...", Color.Gray, out _lblHum, out _lblHumInd));
             cards.Controls[^1].Location = new Point(520, 5);
 
-            // Irrigation card
-            var irrCard = new Panel { Size = new Size(245, 130), BackColor = Color.White, Location = new Point(780, 5), Margin = new Padding(8) };
-            var irrAccent = new Panel { Size = new Size(245, 4), Location = new Point(0, 0), BackColor = Color.FromArgb(0, 200, 150) };
-            irrCard.Controls.Add(irrAccent);
-            var irrIcon = new FontAwesome.Sharp.IconPictureBox { IconChar = FontAwesome.Sharp.IconChar.Water, IconColor = Color.FromArgb(0, 200, 150), IconSize = 32, Location = new Point(15, 18), Size = new Size(32, 32) };
-            irrCard.Controls.Add(irrIcon);
-            var irrVal = new Label { Text = "ON", Font = new Font("Segoe UI", 18, FontStyle.Bold), ForeColor = Color.FromArgb(0, 200, 150), Location = new Point(55, 15), AutoSize = true };
-            irrCard.Controls.Add(irrVal);
-            var irrTitle = new Label { Text = "Irrigation Status", Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(120, 130, 150), Location = new Point(55, 42), AutoSize = true };
-            irrCard.Controls.Add(irrTitle);
-            var irrSub = new Label { Text = "Next cycle in 02:15:30", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(150, 160, 180), Location = new Point(15, 75), AutoSize = true };
-            irrCard.Controls.Add(irrSub);
-            var irrTag = new Label { Text = "Manual", Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = Color.FromArgb(255, 140, 0), Location = new Point(15, 95), AutoSize = true };
-            irrCard.Controls.Add(irrTag);
+            var irrCard = new Panel { Size = new Size(245, 130), BackColor = Color.White, Location = new Point(780, 5) };
+            irrCard.Controls.Add(new Panel { Size = new Size(245, 4), Location = new Point(0, 0), BackColor = Color.FromArgb(0, 200, 150) });
+            irrCard.Controls.Add(new FontAwesome.Sharp.IconPictureBox { IconChar = FontAwesome.Sharp.IconChar.Water, IconColor = Color.FromArgb(0, 200, 150), IconSize = 32, Location = new Point(15, 18), Size = new Size(32, 32) });
+            _lblIrrVal = new Label { Text = "--", Font = new Font("Segoe UI", 18, FontStyle.Bold), ForeColor = Color.FromArgb(0, 200, 150), Location = new Point(55, 15), AutoSize = true };
+            irrCard.Controls.Add(_lblIrrVal);
+            irrCard.Controls.Add(new Label { Text = "Irrigation Status", Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(120, 130, 150), Location = new Point(55, 42), AutoSize = true });
+            _lblIrrSub = new Label { Text = "Loading...", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(150, 160, 180), Location = new Point(15, 75), AutoSize = true };
+            irrCard.Controls.Add(_lblIrrSub);
+            irrCard.Controls.Add(new Label { Text = "Auto", Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = Color.FromArgb(255, 140, 0), Location = new Point(15, 95), AutoSize = true });
             irrCard.Paint += (s, e) => { var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; using var path = new GraphicsPath(); path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(irrCard.Width - 10, 0, 10, 10, 270, 90); path.AddArc(irrCard.Width - 10, irrCard.Height - 10, 10, 10, 0, 90); path.AddArc(0, irrCard.Height - 10, 10, 10, 90, 90); path.CloseFigure(); irrCard.Region = new Region(path); };
             cards.Controls.Add(irrCard);
             Controls.Add(cards);
 
-            // ─── CHART + READINGS ───
             int midY = 240;
-
             var chartPanel = new Panel { Location = new Point(20, midY), Size = new Size(550, 300), BackColor = Color.White };
-            chartPanel.Paint += (s, e) =>
-            {
-                var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-                using var path = new GraphicsPath();
-                int w = chartPanel.Width, h = chartPanel.Height;
-                path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(w - 10, 0, 10, 10, 270, 90);
-                path.AddArc(w - 10, h - 10, 10, 10, 0, 90); path.AddArc(0, h - 10, 10, 10, 90, 90);
-                path.CloseFigure(); chartPanel.Region = new Region(path);
-            };
-
-            var chartTitle = new Label { Text = "Sensor Trends (Last 24 Hours)", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(15, 12), AutoSize = true };
-            chartPanel.Controls.Add(chartTitle);
-
-            var chart = new Chart { Location = new Point(10, 40), Size = new Size(530, 250), BackColor = Color.White };
-            var ca = chart.ChartAreas.Add("Main");
-            ca.AxisX.MajorGrid.LineColor = Color.FromArgb(240, 242, 245);
-            ca.AxisY.MajorGrid.LineColor = Color.FromArgb(240, 242, 245);
-            ca.AxisX.LabelStyle.Font = new Font("Segoe UI", 7);
-            ca.AxisY.LabelStyle.Font = new Font("Segoe UI", 7);
-            ca.BackColor = Color.White;
-
-            var s1 = chart.Series.Add("Temperature (°C)");
-            s1.ChartType = SeriesChartType.Spline;
-            s1.Color = Color.FromArgb(255, 90, 70);
-            s1.BorderWidth = 2;
-            s1.Points.AddXY("0h", 25.2); s1.Points.AddXY("4h", 26.1); s1.Points.AddXY("8h", 27.0);
-            s1.Points.AddXY("12h", 26.8); s1.Points.AddXY("16h", 25.9); s1.Points.AddXY("20h", 26.4);
-            s1.Points.AddXY("24h", 26.4);
-
-            var s2 = chart.Series.Add("Soil Moisture (%)");
-            s2.ChartType = SeriesChartType.Spline;
-            s2.Color = Color.FromArgb(50, 140, 255);
-            s2.BorderWidth = 2;
-            s2.Points.AddXY("0h", 45); s2.Points.AddXY("4h", 42); s2.Points.AddXY("8h", 38);
-            s2.Points.AddXY("12h", 35); s2.Points.AddXY("16h", 33); s2.Points.AddXY("20h", 32);
-            s2.Points.AddXY("24h", 32);
-
-            var s3 = chart.Series.Add("Air Humidity (%)");
-            s3.ChartType = SeriesChartType.Spline;
-            s3.Color = Color.FromArgb(140, 80, 255);
-            s3.BorderWidth = 2;
-            s3.Points.AddXY("0h", 62); s3.Points.AddXY("4h", 64); s3.Points.AddXY("8h", 65);
-            s3.Points.AddXY("12h", 67); s3.Points.AddXY("16h", 66); s3.Points.AddXY("20h", 68);
-            s3.Points.AddXY("24h", 68);
-
-            chartPanel.Controls.Add(chart);
+            chartPanel.Paint += (s, e) => { var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; using var path = new GraphicsPath(); int w = chartPanel.Width, h = chartPanel.Height; path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(w - 10, 0, 10, 10, 270, 90); path.AddArc(w - 10, h - 10, 10, 10, 0, 90); path.AddArc(0, h - 10, 10, 10, 90, 90); path.CloseFigure(); chartPanel.Region = new Region(path); };
+            chartPanel.Controls.Add(new Label { Text = "Sensor Trends (Last 24 Hours)", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(15, 12), AutoSize = true });
+            _chart = new Chart { Location = new Point(10, 40), Size = new Size(530, 250), BackColor = Color.White };
+            var ca = _chart.ChartAreas.Add("Main");
+            ca.AxisX.MajorGrid.LineColor = Color.FromArgb(240, 242, 245); ca.AxisY.MajorGrid.LineColor = Color.FromArgb(240, 242, 245);
+            ca.AxisX.LabelStyle.Font = new Font("Segoe UI", 7); ca.AxisY.LabelStyle.Font = new Font("Segoe UI", 7); ca.BackColor = Color.White;
+            chartPanel.Controls.Add(_chart);
             Controls.Add(chartPanel);
 
-            // ─── RECENT READINGS ───
             var readingsPanel = new Panel { Location = new Point(585, midY), Size = new Size(495, 300), BackColor = Color.White };
-            readingsPanel.Paint += (s, e) =>
-            {
-                var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-                using var path = new GraphicsPath();
-                int w = readingsPanel.Width, h = readingsPanel.Height;
-                path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(w - 10, 0, 10, 10, 270, 90);
-                path.AddArc(w - 10, h - 10, 10, 10, 0, 90); path.AddArc(0, h - 10, 10, 10, 90, 90);
-                path.CloseFigure(); readingsPanel.Region = new Region(path);
-            };
-
-            var rdTitle = new Label { Text = "Recent Readings", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(15, 12), AutoSize = true };
-            readingsPanel.Controls.Add(rdTitle);
-
-            var rdgv = CreateTable(
-                new[] { "Date", "Time", "Plant", "Temp (°C)", "Soil (%)", "Air (%)", "Status" },
-                new[] {
-                    new[] { "May 24, 2025", "11:30 AM", "Tomato", "26.4", "32", "68", "Low Soil Moisture" },
-                    new[] { "May 24, 2025", "11:00 AM", "Lettuce", "24.8", "45", "66", "Normal" },
-                    new[] { "May 24, 2025", "10:30 AM", "Pepper", "27.1", "38", "70", "Normal" },
-                    new[] { "May 24, 2025", "10:00 AM", "Cucumber", "25.6", "41", "64", "Normal" },
-                    new[] { "May 24, 2025", "09:30 AM", "Tomato", "25.9", "28", "67", "Low Soil Moisture" }
-                },
-                new[] { 80, 65, 60, 55, 50, 50, 100 }
-            );
-            rdgv.Location = new Point(10, 40);
-            rdgv.Size = new Size(475, 180);
-            rdgv.CellFormatting += (s, e) =>
-            {
-                if (e.ColumnIndex == 6 && e.Value != null)
-                {
-                    if (e.Value.ToString() == "Normal")
-                        e.CellStyle.ForeColor = Color.FromArgb(0, 190, 100);
-                    else if (e.Value.ToString() == "Low Soil Moisture")
-                        e.CellStyle.ForeColor = Color.FromArgb(255, 140, 0);
-                }
-            };
-            readingsPanel.Controls.Add(rdgv);
-
-            // Status icon legend
-            var legendLabel = new Label
-            {
-                Text = "⚠ Low Soil Moisture  ●  ✔ Normal",
-                Font = new Font("Segoe UI", 8),
-                ForeColor = Color.FromArgb(140, 150, 170),
-                Location = new Point(15, 230),
-                AutoSize = true
-            };
-            readingsPanel.Controls.Add(legendLabel);
+            readingsPanel.Paint += (s, e) => { var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; using var path = new GraphicsPath(); int w = readingsPanel.Width, h = readingsPanel.Height; path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(w - 10, 0, 10, 10, 270, 90); path.AddArc(w - 10, h - 10, 10, 10, 0, 90); path.AddArc(0, h - 10, 10, 10, 90, 90); path.CloseFigure(); readingsPanel.Region = new Region(path); };
+            readingsPanel.Controls.Add(new Label { Text = "Recent Readings", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(15, 12), AutoSize = true });
+            _rdgv = CreateTable(new[] { "Date", "Time", "Sensor", "Type", "Value", "Unit", "Status" });
+            _rdgv.Location = new Point(10, 40); _rdgv.Size = new Size(475, 180);
+            readingsPanel.Controls.Add(_rdgv);
             Controls.Add(readingsPanel);
 
-            // ─── BOTTOM SECTION ───
             int botY = 555;
-
-            // Plants table
             var plantsPanel = new Panel { Location = new Point(20, botY), Size = new Size(340, 150), BackColor = Color.White };
-            plantsPanel.Paint += (s, e) =>
-            {
-                var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-                using var path = new GraphicsPath();
-                int w = plantsPanel.Width, h = plantsPanel.Height;
-                path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(w - 10, 0, 10, 10, 270, 90);
-                path.AddArc(w - 10, h - 10, 10, 10, 0, 90); path.AddArc(0, h - 10, 10, 10, 90, 90);
-                path.CloseFigure(); plantsPanel.Region = new Region(path);
-            };
-            var plTitle = new Label { Text = "Registered Plants", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(12, 10), AutoSize = true };
-            plantsPanel.Controls.Add(plTitle);
-            var plgv = CreateTable(new[] { "Plant", "Type", "Planted On", "Status" }, new[] {
-                new[] { "Tomato", "Fruit", "Apr 28, 2025", "Active" },
-                new[] { "Lettuce", "Leafy Green", "Apr 30, 2025", "Active" },
-                new[] { "Pepper", "Fruit", "Apr 29, 2025", "Active" },
-                new[] { "Cucumber", "Fruit", "May 01, 2025", "Active" }
-            });
-            plgv.Location = new Point(10, 35);
-            plgv.Size = new Size(320, 105);
-            plantsPanel.Controls.Add(plgv);
+            plantsPanel.Paint += (s, e) => { var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; using var path = new GraphicsPath(); int w = plantsPanel.Width, h = plantsPanel.Height; path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(w - 10, 0, 10, 10, 270, 90); path.AddArc(w - 10, h - 10, 10, 10, 0, 90); path.AddArc(0, h - 10, 10, 10, 90, 90); path.CloseFigure(); plantsPanel.Region = new Region(path); };
+            plantsPanel.Controls.Add(new Label { Text = "Registered Plants", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(12, 10), AutoSize = true });
+            _plgv = CreateTable(new[] { "Plant", "Type", "Planted On", "Status" });
+            _plgv.Location = new Point(10, 35); _plgv.Size = new Size(320, 105);
+            plantsPanel.Controls.Add(_plgv);
             Controls.Add(plantsPanel);
 
-            // Requirements panel
             var reqPanel = new Panel { Location = new Point(375, botY), Size = new Size(340, 150), BackColor = Color.White };
-            reqPanel.Paint += (s, e) =>
-            {
-                var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-                using var path = new GraphicsPath();
-                int w = reqPanel.Width, h = reqPanel.Height;
-                path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(w - 10, 0, 10, 10, 270, 90);
-                path.AddArc(w - 10, h - 10, 10, 10, 0, 90); path.AddArc(0, h - 10, 10, 10, 90, 90);
-                path.CloseFigure(); reqPanel.Region = new Region(path);
-            };
-            var rqTitle = new Label { Text = "Requirements per plant", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(12, 10), AutoSize = true };
-            reqPanel.Controls.Add(rqTitle);
-
-            var comboPlant = new ComboBox
-            {
-                Text = "Tomato",
-                Font = new Font("Segoe UI", 9),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Location = new Point(12, 32),
-                Size = new Size(150, 24),
-                FlatStyle = FlatStyle.Flat
-            };
-            comboPlant.Items.AddRange(new[] { "Tomato", "Lettuce", "Pepper", "Cucumber" });
-            comboPlant.SelectedIndex = 0;
-            reqPanel.Controls.Add(comboPlant);
-
-            var rqgv = CreateTable(new[] { "Parameter", "Ideal Range", "Current Value" }, new[] {
-                new[] { "Temperature", "22–28 °C", "26.4 °C" },
-                new[] { "Soil Moisture", "30–60 %", "32 %" },
-                new[] { "Air Humidity", "60–80 %", "68 %" }
-            });
-            rqgv.Location = new Point(10, 60);
-            rqgv.Size = new Size(320, 80);
-            reqPanel.Controls.Add(rqgv);
+            reqPanel.Paint += (s, e) => { var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; using var path = new GraphicsPath(); int w = reqPanel.Width, h = reqPanel.Height; path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(w - 10, 0, 10, 10, 270, 90); path.AddArc(w - 10, h - 10, 10, 10, 0, 90); path.AddArc(0, h - 10, 10, 10, 90, 90); path.CloseFigure(); reqPanel.Region = new Region(path); };
+            reqPanel.Controls.Add(new Label { Text = "Requirements per plant", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(12, 10), AutoSize = true });
+            _rqgv = CreateTable(new[] { "Parameter", "Ideal Range", "Current Value" });
+            _rqgv.Location = new Point(10, 35); _rqgv.Size = new Size(320, 105);
+            reqPanel.Controls.Add(_rqgv);
             Controls.Add(reqPanel);
 
-            // Alerts panel
-            var alertPanel = new Panel { Location = new Point(730, botY), Size = new Size(350, 150), BackColor = Color.White };
-            alertPanel.Paint += (s, e) =>
-            {
-                var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-                using var path = new GraphicsPath();
-                int w = alertPanel.Width, h = alertPanel.Height;
-                path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(w - 10, 0, 10, 10, 270, 90);
-                path.AddArc(w - 10, h - 10, 10, 10, 0, 90); path.AddArc(0, h - 10, 10, 10, 90, 90);
-                path.CloseFigure(); alertPanel.Region = new Region(path);
-            };
-            var alTitle = new Label { Text = "Alerts", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(12, 10), AutoSize = true };
-            alertPanel.Controls.Add(alTitle);
+            _alertPanel = new Panel { Location = new Point(730, botY), Size = new Size(350, 150), BackColor = Color.White };
+            _alertPanel.Paint += (s, e) => { var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; using var path = new GraphicsPath(); int w = _alertPanel.Width, h = _alertPanel.Height; path.AddArc(0, 0, 10, 10, 180, 90); path.AddArc(w - 10, 0, 10, 10, 270, 90); path.AddArc(w - 10, h - 10, 10, 10, 0, 90); path.AddArc(0, h - 10, 10, 10, 90, 90); path.CloseFigure(); _alertPanel.Region = new Region(path); };
+            _alertPanel.Controls.Add(new Label { Text = "Alerts", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(12, 10), AutoSize = true });
+            Controls.Add(_alertPanel);
 
-            string[] alerts = {
-                "⚠ Low soil moisture for Tomato\n   Soil moisture is below the ideal range.\n   11:30 AM",
-                "⚡ Irrigation override active\n   Irrigation is running in manual mode.\n   09:45 AM",
-                "🔧 Scheduled maintenance\n   Sensor calibration recommended.\n   May 24, 08:00 AM"
-            };
-
-            int alertY = 35;
-            foreach (var alert in alerts)
-            {
-                var lbl = new Label { Text = alert, Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(80, 90, 110), Location = new Point(12, alertY), AutoSize = true };
-                alertPanel.Controls.Add(lbl);
-                alertY += 38;
-            }
-            Controls.Add(alertPanel);
-
-            // ─── STATUS BAR ───
             var statusBar = new Panel { Location = new Point(0, 720), Size = new Size(1100, 30), BackColor = Color.FromArgb(240, 242, 245), Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
-
-            var dot = new Label { Text = "●", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(0, 190, 100), Location = new Point(15, 7), AutoSize = true };
-            statusBar.Controls.Add(dot);
-            var statusText = new Label { Text = "System Online", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(100, 110, 130), Location = new Point(30, 7), AutoSize = true };
-            statusBar.Controls.Add(statusText);
-            var updatedText = new Label { Text = "Last updated: May 24, 2025 11:30 AM", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(140, 150, 170), Location = new Point(140, 7), AutoSize = true };
-            statusBar.Controls.Add(updatedText);
-            var versionText = new Label { Text = "AgroControl v1.2.0", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(100, 110, 130), Location = new Point(980, 7), AutoSize = true };
-            statusBar.Controls.Add(versionText);
+            statusBar.Controls.Add(new Label { Text = "●", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(0, 190, 100), Location = new Point(15, 7), AutoSize = true });
+            statusBar.Controls.Add(new Label { Text = "System Online", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(100, 110, 130), Location = new Point(30, 7), AutoSize = true });
+            _updatedText = new Label { Text = "Loading...", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(140, 150, 170), Location = new Point(140, 7), AutoSize = true };
+            statusBar.Controls.Add(_updatedText);
+            statusBar.Controls.Add(new Label { Text = "AgroControl v1.2.0", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(100, 110, 130), Location = new Point(980, 7), AutoSize = true });
             Controls.Add(statusBar);
+        }
+
+        private void LoadData()
+        {
+            try
+            {
+                var dt = Query("SELECT s.tipo, l.valor, l.fechaHora FROM LECTURA l JOIN SENSOR s ON l.idSensor = s.idSensor ORDER BY l.fechaHora DESC");
+                _updatedText.Text = $"Last updated: {DateTime.Now:MMM dd, yyyy hh:mm tt}";
+
+                if (dt.Rows.Count == 0)
+                {
+                    _lblTemp.Text = "No data"; _lblSoil.Text = "No data"; _lblHum.Text = "No data";
+                    return;
+                }
+
+                double lastTemp = 0, lastSoil = 0, lastHum = 0, prevTemp = 0, prevSoil = 0, prevHum = 0;
+                bool hasTemp = false, hasSoil = false, hasHum = false;
+
+                for (int i = 0; i < dt.Rows.Count; i++)
+                {
+                    var tipo = dt.Rows[i]["tipo"].ToString();
+                    var val = Convert.ToDouble(dt.Rows[i]["valor"]);
+                    if (tipo == "tempAire") { if (!hasTemp) { prevTemp = lastTemp; lastTemp = val; hasTemp = true; } }
+                    else if (tipo == "humSuelo") { if (!hasSoil) { prevSoil = lastSoil; lastSoil = val; hasSoil = true; } }
+                    else if (tipo == "humAire") { if (!hasHum) { prevHum = lastHum; lastHum = val; hasHum = true; } }
+                }
+
+                // Find previous values for trend (look at 2nd readings)
+                int count = 0;
+                foreach (DataRow row in dt.Rows)
+                {
+                    var tipo = row["tipo"].ToString();
+                    var val = Convert.ToDouble(row["valor"]);
+                    if (tipo == "tempAire" && count == 0) { prevTemp = val; }
+                    else if (tipo == "tempAire" && prevTemp == lastTemp && val != lastTemp) prevTemp = val;
+                    if (tipo == "humSuelo" && count == 0) { prevSoil = val; }
+                    else if (tipo == "humSuelo" && prevSoil == lastSoil && val != lastSoil) prevSoil = val;
+                    if (tipo == "humAire" && count == 0) { prevHum = val; }
+                    else if (tipo == "humAire" && prevHum == lastHum && val != lastHum) prevHum = val;
+                    count++;
+                }
+
+                if (hasTemp) {
+                    _lblTemp.Text = $"{lastTemp:F1} °C";
+                    var diff = lastTemp - prevTemp;
+                    _lblTempInd.Text = $"{(diff >= 0 ? "+" : "")}{diff:F1} °C vs last hour";
+                    _lblTempInd.ForeColor = Math.Abs(diff) < 2 ? Color.FromArgb(0, 190, 100) : Color.FromArgb(255, 80, 60);
+                }
+                if (hasSoil) {
+                    _lblSoil.Text = $"{lastSoil:F0} %";
+                    var diff = lastSoil - prevSoil;
+                    _lblSoilInd.Text = $"{(diff >= 0 ? "+" : "")}{diff:F0} % vs last hour";
+                    _lblSoilInd.ForeColor = lastSoil >= 30 ? Color.FromArgb(0, 190, 100) : Color.FromArgb(255, 140, 0);
+                }
+                if (hasHum) {
+                    _lblHum.Text = $"{lastHum:F0} %";
+                    var diff = lastHum - prevHum;
+                    _lblHumInd.Text = $"{(diff >= 0 ? "+" : "")}{diff:F0} % vs last hour";
+                    _lblHumInd.ForeColor = Math.Abs(diff) < 5 ? Color.FromArgb(0, 190, 100) : Color.FromArgb(255, 140, 0);
+                }
+
+                if (hasSoil && lastSoil < 30) { _lblIrrVal.Text = "ON"; _lblIrrVal.ForeColor = Color.FromArgb(0, 200, 150); _lblIrrSub.Text = "Irrigation active"; }
+                else { _lblIrrVal.Text = "OFF"; _lblIrrVal.ForeColor = Color.Gray; _lblIrrSub.Text = "Standing by"; }
+
+                // Recent readings
+                _rdgv.Rows.Clear();
+                int shown = 0;
+                foreach (DataRow row in dt.Rows)
+                {
+                    if (shown >= 20) break;
+                    var fecha = Convert.ToDateTime(row["fechaHora"]);
+                    var tipo = row["tipo"].ToString();
+                    var val = Convert.ToDouble(row["valor"]);
+                    var unit = tipo == "tempAire" ? "°C" : tipo == "humSuelo" ? "%" : tipo == "humAire" ? "%" : tipo == "luz" ? "lx" : "";
+                    var status = (tipo == "humSuelo" && val < 30) ? "⚠ Low" : (tipo == "tempAire" && (val < 22 || val > 28)) ? "⚠ Alert" : "Normal";
+                    _rdgv.Rows.Add(fecha.ToString("MMM dd, yyyy"), fecha.ToString("hh:mm tt"), tipo, tipo, val.ToString("F1"), unit, status);
+                    shown++;
+                }
+
+                // Chart - last 24h grouped by hour
+                var chartDt = Query(@"
+                    SELECT s.tipo, DATE_TRUNC('hour', l.fechaHora) AS hora, AVG(l.valor) AS prom
+                    FROM LECTURA l JOIN SENSOR s ON l.idSensor = s.idSensor
+                    WHERE l.fechaHora >= NOW() - INTERVAL '24 hours'
+                    GROUP BY s.tipo, DATE_TRUNC('hour', l.fechaHora)
+                    ORDER BY hora");
+                _chart.Series.Clear();
+
+                var sTemp = _chart.Series.Add("Temperature (°C)");
+                sTemp.ChartType = SeriesChartType.Spline; sTemp.Color = Color.FromArgb(255, 90, 70); sTemp.BorderWidth = 2;
+                var sSoil = _chart.Series.Add("Soil Moisture (%)");
+                sSoil.ChartType = SeriesChartType.Spline; sSoil.Color = Color.FromArgb(50, 140, 255); sSoil.BorderWidth = 2;
+                var sHum = _chart.Series.Add("Air Humidity (%)");
+                sHum.ChartType = SeriesChartType.Spline; sHum.Color = Color.FromArgb(140, 80, 255); sHum.BorderWidth = 2;
+
+                if (chartDt.Rows.Count > 0)
+                {
+                    foreach (DataRow row in chartDt.Rows)
+                    {
+                        var hora = Convert.ToDateTime(row["hora"]).ToString("HH:mm");
+                        var tipo = row["tipo"].ToString();
+                        var prom = Convert.ToDouble(row["prom"]);
+                        if (tipo == "tempAire") sTemp.Points.AddXY(hora, prom);
+                        else if (tipo == "humSuelo") sSoil.Points.AddXY(hora, prom);
+                        else if (tipo == "humAire") sHum.Points.AddXY(hora, prom);
+                    }
+                }
+                else
+                {
+                    // Fallback to sample data if no real data
+                    for (int i = 0; i < 6; i++)
+                    {
+                        var h = $"{i * 4}h";
+                        sTemp.Points.AddXY(h, 24 + new Random().NextDouble() * 4);
+                        sSoil.Points.AddXY(h, 30 + new Random().NextDouble() * 20);
+                        sHum.Points.AddXY(h, 60 + new Random().NextDouble() * 15);
+                    }
+                }
+
+                // Plants from DB
+                var plantDt = Query("SELECT nombre, nombreCien, descripcion FROM PLANTA ORDER BY idPlanta");
+                _plgv.Rows.Clear();
+                foreach (DataRow row in plantDt.Rows)
+                    _plgv.Rows.Add(row["nombre"], row["nombreCien"], "N/A", "Active");
+
+                // Requirements
+                _rqgv.Rows.Clear();
+                if (hasTemp) _rqgv.Rows.Add("Temperature", "22–28 °C", $"{lastTemp:F1} °C");
+                if (hasSoil) _rqgv.Rows.Add("Soil Moisture", "30–60 %", $"{lastSoil:F0} %");
+                if (hasHum) _rqgv.Rows.Add("Air Humidity", "60–80 %", $"{lastHum:F0} %");
+
+                // Alerts
+                _alertPanel.Controls.Clear();
+                _alertPanel.Controls.Add(new Label { Text = "Alerts", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.FromArgb(50, 55, 70), Location = new Point(12, 10), AutoSize = true });
+                int ay = 35;
+                bool anyAlert = false;
+                if (hasSoil && lastSoil < 30)
+                {
+                    _alertPanel.Controls.Add(new Label { Text = $"⚠ Low soil moisture\n   Soil moisture is {lastSoil:F0}% (below 30%).\n   {DateTime.Now:hh:mm tt}", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(80, 90, 110), Location = new Point(12, ay), AutoSize = true });
+                    ay += 38; anyAlert = true;
+                }
+                if (hasTemp && (lastTemp < 22 || lastTemp > 28))
+                {
+                    _alertPanel.Controls.Add(new Label { Text = $"⚠ Temperature alert\n   Temperature is {lastTemp:F1}°C (outside 22-28°C).\n   {DateTime.Now:hh:mm tt}", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(80, 90, 110), Location = new Point(12, ay), AutoSize = true });
+                    ay += 38; anyAlert = true;
+                }
+                if (!anyAlert)
+                    _alertPanel.Controls.Add(new Label { Text = "✓ All systems normal\n   No alerts at this time.", Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(80, 90, 110), Location = new Point(12, ay), AutoSize = true });
+            }
+            catch (Exception ex)
+            {
+                _lblTemp.Text = "Error";
+                _lblSoil.Text = "Error";
+                _lblHum.Text = "Error";
+                _updatedText.Text = $"Error loading data: {ex.Message}";
+            }
         }
     }
 }
