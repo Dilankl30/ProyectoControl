@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AgroControl</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; }
+.topbar { background: linear-gradient(135deg, #5456F0, #7850F0); padding: 16px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; }
+.topbar h1 { font-size: 20px; font-weight: 700; color: #fff; flex: 1; }
+.topbar .status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,.8); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot.online { background: #00e676; box-shadow: 0 0 8px #00e676; }
+.dot.offline { background: #ff5252; }
+.container { max-width: 800px; margin: 0 auto; padding: 12px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+@media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
+.card { background: #1a1a2e; border-radius: 14px; padding: 16px; border: 1px solid rgba(255,255,255,.06); }
+.card .icon { font-size: 24px; margin-bottom: 4px; }
+.card .label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #8888aa; }
+.card .value { font-size: 28px; font-weight: 700; margin: 4px 0 2px; }
+.card .sub { font-size: 12px; color: #8888aa; }
+.card .indicator { font-size: 11px; font-weight: 600; margin-top: 4px; }
+.section-title { font-size: 14px; font-weight: 700; color: #aaaacc; margin: 20px 0 10px; text-transform: uppercase; letter-spacing: .8px; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+.toggle-row:last-child { border-bottom: none; }
+.toggle-row .info { flex: 1; }
+.toggle-row .info .name { font-weight: 600; font-size: 15px; }
+.toggle-row .info .desc { font-size: 12px; color: #8888aa; }
+.toggle { position: relative; width: 52px; height: 28px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle .slider { position: absolute; inset: 0; cursor: pointer; background: #333355; border-radius: 28px; transition: .25s; }
+.toggle .slider::before { content: ''; position: absolute; left: 3px; bottom: 3px; width: 22px; height: 22px; background: #666; border-radius: 50%; transition: .25s; }
+.toggle input:checked + .slider { background: #5456F0; }
+.toggle input:checked + .slider::before { transform: translateX(24px); background: #fff; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 8px 6px; color: #8888aa; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid rgba(255,255,255,.08); }
+td { padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.04); }
+tr:last-child td { border-bottom: none; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge.good { background: rgba(0,230,118,.15); color: #00e676; }
+.badge.warn { background: rgba(255,171,0,.15); color: #ffab00; }
+.badge.bad { background: rgba(255,82,82,.15); color: #ff5252; }
+.loading { text-align: center; padding: 40px; color: #8888aa; }
+.log-entry { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px; }
+.log-entry .action { font-weight: 600; }
+.log-entry .time { color: #8888aa; font-size: 12px; }
+.empty { text-align: center; padding: 24px; color: #555577; font-size: 14px; }
+.last-updated { text-align: center; font-size: 11px; color: #555577; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>AgroControl</h1>
+  <div class="status"><span class="dot online" id="statusDot"></span><span id="statusText">Online</span></div>
+</div>
+<div class="container">
+  <div class="grid" id="sensorGrid"></div>
+
+  <div class="section-title">Controls</div>
+  <div class="card" id="controlsPanel"></div>
+
+  <div class="section-title">Recent Readings</div>
+  <div class="card" id="readingsTable"><div class="loading">Loading...</div></div>
+
+  <div class="section-title">Command Log</div>
+  <div class="card" id="commandLog"><div class="loading">Loading...</div></div>
+
+  <div class="last-updated" id="lastUpdated">Connecting...</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://ezuqrhdtpwbxnatzlzrt.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6dXFyaGR0cHdieG5hdHpsenJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NjQ2NjksImV4cCI6MjA5NzE0MDY2OX0.TfTMZaKQG80jalMpoGwPuteGyFiAsnMs1mvvuNhnxt8';
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const SENSOR_ICONS = { tempAire: '🌡️', humAire: '💧', humSuelo: '🌱', luz: '☀️' };
+const SENSOR_LABELS = { tempAire: 'Temperature', humAire: 'Air Humidity', humSuelo: 'Soil Moisture', luz: 'Light' };
+const SENSOR_UNITS = { tempAire: '°C', humAire: '%', humSuelo: '%', luz: ' lux' };
+const SENSOR_IDEAL = { tempAire: [22, 28], humAire: [60, 80], humSuelo: [30, 60], luz: [500, 2000] };
+
+const CONTROLS = [
+  { id: 'led', name: 'LED Grow Light', desc: 'Supplementary lighting', icon: '💡' },
+  { id: 'bomba', name: 'Water Pump', desc: 'Irrigation system', icon: '💦' },
+  { id: 'ventilador', name: 'Fan', desc: 'Air circulation', icon: '🌀' },
+];
+
+let currentReadings = {};
+let devicesState = {};
+
+function getIndicator(val, type) {
+  const ideal = SENSOR_IDEAL[type];
+  if (!ideal) return { text: '—', cls: '' };
+  if (val >= ideal[0] && val <= ideal[1]) return { text: '✓ Good', cls: 'good' };
+  if (val < ideal[0]) return { text: '⬇ Low', cls: 'warn' };
+  return { text: '⬆ High', cls: 'warn' };
+}
+
+function renderSensors() {
+  const grid = document.getElementById('sensorGrid');
+  const types = ['tempAire', 'humSuelo', 'humAire', 'luz'];
+  grid.innerHTML = types.map(t => {
+    const r = currentReadings[t] || {};
+    const val = r.valor;
+    const ind = val != null ? getIndicator(val, t) : { text: '—', cls: '' };
+    const time = r.fechahora ? new Date(r.fechahora).toLocaleTimeString() : '—';
+    return `<div class="card">
+      <div class="icon">${SENSOR_ICONS[t] || '📡'}</div>
+      <div class="label">${SENSOR_LABELS[t] || t}</div>
+      <div class="value">${val != null ? val + (SENSOR_UNITS[t]||'') : '--'}</div>
+      <div class="sub">Ideal: ${(SENSOR_IDEAL[t]||[]).join('–')}${SENSOR_UNITS[t]||''}</div>
+      <div class="indicator"><span class="badge ${ind.cls}">${ind.text}</span></div>
+      <div class="sub" style="margin-top:4px;font-size:10px">${time}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderControls() {
+  const panel = document.getElementById('controlsPanel');
+  panel.innerHTML = CONTROLS.map(c => {
+    const checked = devicesState[c.id] === 'on';
+    return `<div class="toggle-row">
+      <div class="info"><span class="name">${c.icon} ${c.name}</span><div class="desc">${c.desc}</div></div>
+      <label class="toggle"><input type="checkbox" ${checked?'checked':''} data-device="${c.id}" onchange="toggleDevice(this)"><span class="slider"></span></label>
+    </div>`;
+  }).join('');
+}
+
+async function toggleDevice(el) {
+  const accion = el.checked ? `${el.dataset.device}_on` : `${el.dataset.device}_off`;
+  devicesState[el.dataset.device] = el.checked ? 'on' : 'off';
+  await supabase.from('COMANDOS').insert({ accion, estado: 'pendiente' });
+  loadCommandLog();
+}
+
+async function loadSensors() {
+  const { data, error } = await supabase
+    .from('LECTURA').select('idSensor, valor, fechaHora')
+    .order('fechaHora', { ascending: false }).limit(100);
+  if (error) return;
+  const { data: sensores } = await supabase.from('SENSOR').select('idSensor, tipo');
+  if (!sensores) return;
+  const tipoMap = {};
+  sensores.forEach(s => tipoMap[s.idSensor] = s.tipo);
+  const seen = {};
+  currentReadings = {};
+  for (const r of data) {
+    const t = tipoMap[r.idSensor];
+    if (!t || seen[t]) continue;
+    seen[t] = true;
+    currentReadings[t] = r;
+  }
+  renderSensors();
+}
+
+async function loadReadings() {
+  const { data, error } = await supabase
+    .from('LECTURA').select('idSensor, valor, fechaHora')
+    .order('fechaHora', { ascending: false }).limit(20);
+  if (error) { document.getElementById('readingsTable').innerHTML = '<div class="empty">Error loading</div>'; return; }
+  const { data: sensores } = await supabase.from('SENSOR').select('idSensor, tipo');
+  const tipoMap = {};
+  if (sensores) sensores.forEach(s => tipoMap[s.idSensor] = s.tipo);
+  let html = '<table><thead><tr><th>Time</th><th>Sensor</th><th>Value</th></tr></thead><tbody>';
+  (data || []).forEach(r => {
+    const t = tipoMap[r.idSensor] || '?';
+    const time = new Date(r.fechaHora).toLocaleString();
+    const val = r.valor != null ? r.valor + (SENSOR_UNITS[t]||'') : '—';
+    html += `<tr><td>${time}</td><td>${SENSOR_LABELS[t]||t}</td><td><strong>${val}</strong></td></tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('readingsTable').innerHTML = html;
+}
+
+async function loadCommandLog() {
+  const { data, error } = await supabase
+    .from('COMANDOS').select('*').order('creadoEn', { ascending: false }).limit(10);
+  if (error) { document.getElementById('commandLog').innerHTML = '<div class="empty">Error loading</div>'; return; }
+  if (!data || data.length === 0) { document.getElementById('commandLog').innerHTML = '<div class="empty">No commands yet</div>'; return; }
+  document.getElementById('commandLog').innerHTML = data.map(c => {
+    const time = new Date(c.creadoEn).toLocaleString();
+    return `<div class="log-entry"><span class="action">${c.accion}</span><span class="time">${time}</span></div>`;
+  }).join('');
+}
+
+async function loadLastCommandStates() {
+  const { data } = await supabase
+    .from('COMANDOS').select('accion').order('creadoEn', { ascending: false }).limit(20);
+  if (!data) return;
+  for (const c of CONTROLS) {
+    const last = data.find(d => d.accion.startsWith(c.id));
+    if (last) devicesState[c.id] = last.accion.endsWith('_on') ? 'on' : 'off';
+  }
+  renderControls();
+}
+
+let statusErrCount = 0;
+async function refresh() {
+  try {
+    await Promise.all([loadSensors(), loadReadings(), loadCommandLog(), loadLastCommandStates()]);
+    statusErrCount = 0;
+    document.getElementById('statusDot').className = 'dot online';
+    document.getElementById('statusText').textContent = 'Online';
+    document.getElementById('lastUpdated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    statusErrCount++;
+    if (statusErrCount > 2) {
+      document.getElementById('statusDot').className = 'dot offline';
+      document.getElementById('statusText').textContent = 'Offline';
+    }
+  }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
