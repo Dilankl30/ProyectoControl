@@ -1,37 +1,35 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Entities;
+using Npgsql;
 using System.Data;
-using System.Data.SqlClient;
-using System.Linq;
-using System.Numerics;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BusinessLogic
 {
     public class PlantBus
     {
-        // Insertar una nueva planta (idPlanta se omite por ser IDENTITY)
+        public int IdPlanta { get; set; }
+        public string Nombre { get; set; }
+        public string NombreCien { get; set; }
+        public string Descripcion { get; set; }
+
         public static int insertar(Plant planta)
         {
             string sql = "INSERT INTO PLANTA (nombre, nombreCien, descripcion) VALUES (@nombre, @nombreCien, @descripcion)";
 
-            List<SqlParameter> parametros = new List<SqlParameter>();
-            parametros.Add(new SqlParameter("@nombre", planta.Nombre));
-            parametros.Add(new SqlParameter("@nombreCien", planta.NombreCien));
-            parametros.Add(new SqlParameter("@descripcion", string.IsNullOrEmpty(planta.Descripcion) ? (object)DBNull.Value : planta.Descripcion));
+            var parametros = new List<NpgsqlParameter>();
+            parametros.Add(new NpgsqlParameter("@nombre", planta.Nombre));
+            parametros.Add(new NpgsqlParameter("@nombreCien", planta.NombreCien));
+            parametros.Add(new NpgsqlParameter("@descripcion", string.IsNullOrEmpty(planta.Descripcion) ? (object)DBNull.Value : planta.Descripcion));
 
             return DataAccess.DataAccess.execQuery(sql, parametros);
         }
 
-        // Obtener una sola planta por su ID
         public static PlantBus getPlanta(int idPlanta)
         {
             PlantBus planta = null;
             string sql = "SELECT * FROM PLANTA WHERE idPlanta = @id";
 
-            List<SqlParameter> parametros = new List<SqlParameter>();
-            parametros.Add(new SqlParameter("@id", idPlanta));
+            var parametros = new List<NpgsqlParameter>();
+            parametros.Add(new NpgsqlParameter("@id", idPlanta));
 
             DataTable tabla = DataAccess.DataAccess.getQuery(sql, parametros);
 
@@ -47,22 +45,20 @@ namespace BusinessLogic
             return planta;
         }
 
-        // Obtener la lista completa de plantas
         public static List<PlantBus> getPlantas()
         {
-            List<PlantBus> lista = new List<PlantBus>();
+            var lista = new List<PlantBus>();
             string sql = "SELECT * FROM PLANTA";
 
             DataTable tabla = DataAccess.DataAccess.getQuery(sql);
 
             foreach (DataRow row in tabla.Rows)
             {
-                PlantBus planta = new PlantBus();
+                var planta = new PlantBus();
                 planta.IdPlanta = Convert.ToInt32(row["idPlanta"]);
                 planta.Nombre = row["nombre"].ToString();
                 planta.NombreCien = row["nombreCien"].ToString();
                 planta.Descripcion = row["descripcion"].ToString();
-
                 lista.Add(planta);
             }
             return lista;

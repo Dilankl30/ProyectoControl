@@ -1,6 +1,6 @@
-﻿namespace AgroControl
+namespace AgroControl
 {
-    partial class charts
+    partial class helpForm
     {
         private System.ComponentModel.IContainer components = null;
 
@@ -14,10 +14,10 @@
         private void InitializeComponent()
         {
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1000, 500);
+            ClientSize = new Size(1000, 650);
             FormBorderStyle = FormBorderStyle.None;
-            Name = "charts";
-            Text = "Charts";
+            Name = "helpForm";
+            Text = "Help";
             BackColor = Color.FromArgb(245, 247, 250);
         }
     }

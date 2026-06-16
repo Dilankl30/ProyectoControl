@@ -28,11 +28,11 @@ namespace AgroControl
                 // Se añade el filtro CASE WHEN para el tipo 'luz'
                 string sql = @"
             SELECT 
-                L.fechaHora AS 'Fecha y hora',
-                MAX(CASE WHEN S.tipo = 'humSuelo' THEN L.valor END) AS 'Humedad del suelo',
-                MAX(CASE WHEN S.tipo = 'tempAire' THEN L.valor END) AS 'Temperatura',
-                MAX(CASE WHEN S.tipo = 'humAire' THEN L.valor END) AS 'Humedad del aire',
-                MAX(CASE WHEN S.tipo = 'luz' THEN L.valor END) AS 'Intensidad de luz'
+                L.fechaHora AS ""Fecha y hora"",
+                MAX(CASE WHEN S.tipo = 'humSuelo' THEN L.valor END) AS ""Humedad del suelo"",
+                MAX(CASE WHEN S.tipo = 'tempAire' THEN L.valor END) AS ""Temperatura"",
+                MAX(CASE WHEN S.tipo = 'humAire' THEN L.valor END) AS ""Humedad del aire"",
+                MAX(CASE WHEN S.tipo = 'luz' THEN L.valor END) AS ""Intensidad de luz""
             FROM LECTURA L
             INNER JOIN SENSOR S ON L.idSensor = S.idSensor
             GROUP BY L.fechaHora
