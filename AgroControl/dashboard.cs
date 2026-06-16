@@ -3,6 +3,7 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms.DataVisualization.Charting;
 using Npgsql;
 
+#nullable disable
 namespace AgroControl
 {
     public partial class dashboard : Form

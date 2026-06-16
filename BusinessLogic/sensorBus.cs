@@ -2,6 +2,7 @@
 using Npgsql;
 using System.Data;
 
+#nullable disable
 namespace BusinessLogic
 {
     public class SensorBus

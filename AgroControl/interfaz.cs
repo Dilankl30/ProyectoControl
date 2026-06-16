@@ -6,8 +6,8 @@ namespace AgroControl
 {
     public partial class Interfaz : Form
     {
-        private Usuario _usuarioLogueado;
-        private Button _activeMenu;
+        private Usuario _usuarioLogueado = null!;
+        private Button _activeMenu = null!;
 
         public Interfaz()
         {
@@ -25,7 +25,7 @@ namespace AgroControl
             panelTitleBar.Paint += PanelTitleBar_Paint;
         }
 
-        private void PanelTitleBar_Paint(object sender, PaintEventArgs e)
+        private void PanelTitleBar_Paint(object? sender, PaintEventArgs e)
         {
             var g = e.Graphics;
             var rect = panelTitleBar.ClientRectangle;
@@ -33,7 +33,7 @@ namespace AgroControl
             g.FillRectangle(brush, rect);
         }
 
-        private void HighlightMenu(Button btn)
+        private void HighlightMenu(Button? btn)
         {
             foreach (Control c in panelMenu.Controls)
             {

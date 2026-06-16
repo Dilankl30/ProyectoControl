@@ -10,6 +10,9 @@
     <Compile Update="charts.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="helpForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="interfaz.cs">
       <SubType>Form</SubType>
     </Compile>
